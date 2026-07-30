@@ -47,7 +47,7 @@ Example body:
 
 ```json
 {
-  "uploadUrl": "https://booking.huyhoangcargo.com/admin/customer/5319/scan-upload-signed?expires=...&signature=...",
+  "uploadUrl": "https://demo.huyhoangcargo.com/admin/customer/5319/scan-upload-signed?expires=...&signature=...",
   "fieldName": "scan_file"
 }
 ```
