@@ -1,4 +1,5 @@
 using System.Net.Http.Headers;
+using System.Runtime.InteropServices;
 using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -76,7 +77,7 @@ app.MapPost("/scan", async (
 
     try
     {
-        scannedFile = ScanWithWia(settings.Value);
+        scannedFile = ScanWithRetry(settings.Value);
     }
     catch (Exception exception)
     {
@@ -134,6 +135,39 @@ app.MapPost("/upload-latest", async (
 
 app.Run();
 
+static FileInfo ScanWithRetry(ScannerAgentOptions options)
+{
+    Exception? lastException = null;
+    var attempts = Math.Max(1, options.ScanRetryAttempts);
+    var delayMs = Math.Max(0, options.ScanRetryDelayMs);
+
+    for (var attempt = 1; attempt <= attempts; attempt++)
+    {
+        try
+        {
+            return ScanWithWia(options);
+        }
+        catch (Exception exception) when (IsScannerBusy(exception) && attempt < attempts)
+        {
+            lastException = exception;
+            Thread.Sleep(delayMs);
+        }
+        catch (Exception exception) when (IsScannerBusy(exception))
+        {
+            lastException = exception;
+        }
+    }
+
+    if (lastException != null && IsScannerBusy(lastException))
+    {
+        throw new InvalidOperationException(
+            "The scanner is busy. Please close PaperStream ClickScan, Windows Scan, or any open scanner dialog, wait a few seconds, then try again.",
+            lastException);
+    }
+
+    throw lastException ?? new InvalidOperationException("Scanner failed.");
+}
+
 static FileInfo ScanWithWia(ScannerAgentOptions options)
 {
     if (!OperatingSystem.IsWindows())
@@ -166,6 +200,20 @@ static FileInfo ScanWithWia(ScannerAgentOptions options)
     }
 
     return scannedFile ?? throw new InvalidOperationException("Scanner did not return a file.");
+}
+
+static bool IsScannerBusy(Exception exception)
+{
+    if (exception is COMException comException)
+    {
+        // WIA busy/general communication errors often arrive as COM exceptions.
+        return comException.Message.Contains("busy", StringComparison.OrdinalIgnoreCase)
+            || comException.HResult == unchecked((int) 0x80210006)
+            || comException.HResult == unchecked((int) 0x8021000A);
+    }
+
+    return exception.Message.Contains("busy", StringComparison.OrdinalIgnoreCase)
+        || (exception.InnerException != null && IsScannerBusy(exception.InnerException));
 }
 
 static FileInfo ScanWithWiaOnStaThread(ScannerAgentOptions options)
@@ -303,6 +351,8 @@ public sealed class ScannerAgentOptions
     public string UploadFieldName { get; set; } = "scan_file";
     public bool AlwaysSelectScanner { get; set; } = false;
     public bool ShowScannerUi { get; set; } = true;
+    public int ScanRetryAttempts { get; set; } = 3;
+    public int ScanRetryDelayMs { get; set; } = 1500;
     public string[] AllowedOrigins { get; set; } = [];
     public string[] AllowedExtensions { get; set; } = [".pdf", ".jpg", ".jpeg", ".png", ".tif", ".tiff"];
 }
