@@ -269,9 +269,23 @@ static async Task<UploadResult> UploadScan(
 
     var response = await client.PostAsync(uploadUri, form);
     var responseText = await response.Content.ReadAsStringAsync();
+    var contentType = response.Content.Headers.ContentType?.MediaType ?? "";
     string? uploadedPath = null;
     string? uploadedUrl = null;
     string? uploadedName = null;
+
+    if (contentType.Contains("text/html", StringComparison.OrdinalIgnoreCase)
+        || responseText.TrimStart().StartsWith("<!DOCTYPE", StringComparison.OrdinalIgnoreCase)
+        || responseText.TrimStart().StartsWith("<html", StringComparison.OrdinalIgnoreCase))
+    {
+        return new UploadResult(
+            false,
+            response.StatusCode,
+            "Laravel returned an HTML page instead of JSON. The upload URL may be behind login/admin middleware or the signed URL may be invalid.",
+            null,
+            null,
+            null);
+    }
 
     if (response.IsSuccessStatusCode && !string.IsNullOrWhiteSpace(responseText))
     {
