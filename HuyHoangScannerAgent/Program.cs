@@ -271,6 +271,8 @@ static async Task<UploadResult> UploadScan(
     form.Add(fileContent, fieldName, scanFile.Name);
 
     var client = httpClientFactory.CreateClient("LaravelUpload");
+    client.DefaultRequestHeaders.Accept.Clear();
+    client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
     var response = await client.PostAsync(uploadUri, form);
     var responseText = await response.Content.ReadAsStringAsync();
