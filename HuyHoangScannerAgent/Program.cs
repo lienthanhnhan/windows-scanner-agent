@@ -95,13 +95,14 @@ app.MapPost("/scan", async (
     }
 
     var uploadResult = await UploadScan(scannedFile, uploadUri, request.FieldName ?? settings.Value.UploadFieldName, httpClientFactory);
+    var scannedFileResponse = ToScanFileResponse(scannedFile);
     var localFileDeleted = DeleteLocalScanIfUploaded(scannedFile, uploadResult);
 
     return Results.Json(new
     {
         ok = uploadResult.IsSuccessStatusCode,
         statusCode = (int) uploadResult.StatusCode,
-        file = ToScanFileResponse(scannedFile),
+        file = scannedFileResponse,
         localFileDeleted,
         response = uploadResult.ResponseText,
         path = uploadResult.UploadedPath,
@@ -132,13 +133,14 @@ app.MapPost("/upload-latest", async (
     }
 
     var uploadResult = await UploadScan(latest, uploadUri, request.FieldName ?? settings.Value.UploadFieldName, httpClientFactory);
+    var latestFileResponse = ToScanFileResponse(latest);
     var localFileDeleted = DeleteLocalScanIfUploaded(latest, uploadResult);
 
     return Results.Json(new
     {
         ok = uploadResult.IsSuccessStatusCode,
         statusCode = (int) uploadResult.StatusCode,
-        file = ToScanFileResponse(latest),
+        file = latestFileResponse,
         localFileDeleted,
         response = uploadResult.ResponseText
     }, statusCode: uploadResult.IsSuccessStatusCode ? 200 : 502);
