@@ -239,14 +239,33 @@ static FileInfo ScanWithWiaOnStaThread(ScannerAgentOptions options)
         throw new InvalidOperationException("Windows Image Acquisition is not available on this computer.");
     }
 
-    dynamic commonDialog = Activator.CreateInstance(commonDialogType)
-        ?? throw new InvalidOperationException("Could not open Windows scanner dialog.");
-
     // WIA constants: 1 = scanner device, color intent. JPEG format ID is WIA's built-in image format.
     const int scannerDeviceType = 1;
     const int colorIntent = 1;
     const int noBias = 0;
     const string jpegFormatId = "{B96B3CAE-0728-11D3-9D7B-0000F81EF32E}";
+
+    var preferredScanner = FindPreferredScanner(options, scannerDeviceType);
+
+    if (preferredScanner != null)
+    {
+        try
+        {
+            dynamic device = preferredScanner.Connect();
+            dynamic item = device.Items[1];
+            dynamic imageFile = item.Transfer(jpegFormatId);
+            imageFile.SaveFile(filePath);
+
+            return new FileInfo(filePath);
+        }
+        catch
+        {
+            // Fall back to the Windows scanner UI if direct preferred-device scanning fails.
+        }
+    }
+
+    dynamic commonDialog = Activator.CreateInstance(commonDialogType)
+        ?? throw new InvalidOperationException("Could not open Windows scanner dialog.");
 
     dynamic imageFile = commonDialog.ShowAcquireImage(
         scannerDeviceType,
@@ -260,6 +279,53 @@ static FileInfo ScanWithWiaOnStaThread(ScannerAgentOptions options)
     imageFile.SaveFile(filePath);
 
     return new FileInfo(filePath);
+}
+
+static dynamic? FindPreferredScanner(ScannerAgentOptions options, int scannerDeviceType)
+{
+    if (string.IsNullOrWhiteSpace(options.PreferredScannerNameContains))
+    {
+        return null;
+    }
+
+    var deviceManagerType = Type.GetTypeFromProgID("WIA.DeviceManager");
+
+    if (deviceManagerType == null)
+    {
+        return null;
+    }
+
+    dynamic deviceManager = Activator.CreateInstance(deviceManagerType)
+        ?? throw new InvalidOperationException("Could not open Windows scanner device manager.");
+
+    foreach (dynamic deviceInfo in deviceManager.DeviceInfos)
+    {
+        if ((int) deviceInfo.Type != scannerDeviceType)
+        {
+            continue;
+        }
+
+        var scannerText = DeviceInfoText(deviceInfo);
+
+        if (scannerText.Contains(options.PreferredScannerNameContains, StringComparison.OrdinalIgnoreCase))
+        {
+            return deviceInfo;
+        }
+    }
+
+    return null;
+}
+
+static string DeviceInfoText(dynamic deviceInfo)
+{
+    var values = new List<string>();
+
+    foreach (dynamic property in deviceInfo.Properties)
+    {
+        values.Add(Convert.ToString(property.Value) ?? "");
+    }
+
+    return string.Join(" ", values);
 }
 
 static async Task<UploadResult> UploadScan(
@@ -413,6 +479,7 @@ public sealed class ScannerAgentOptions
     public string UploadFieldName { get; set; } = "scan_file";
     public bool AlwaysSelectScanner { get; set; } = false;
     public bool ShowScannerUi { get; set; } = true;
+    public string PreferredScannerNameContains { get; set; } = "fi-65F";
     public int ScanRetryAttempts { get; set; } = 3;
     public int ScanRetryDelayMs { get; set; } = 1500;
     public string[] AllowedOrigins { get; set; } = [];
