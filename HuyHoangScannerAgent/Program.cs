@@ -253,8 +253,8 @@ static FileInfo ScanWithWiaOnStaThread(ScannerAgentOptions options)
         {
             dynamic device = preferredScanner.Connect();
             dynamic item = device.Items[1];
-            dynamic imageFile = item.Transfer(jpegFormatId);
-            imageFile.SaveFile(filePath);
+            dynamic preferredImageFile = item.Transfer(jpegFormatId);
+            preferredImageFile.SaveFile(filePath);
 
             return new FileInfo(filePath);
         }
