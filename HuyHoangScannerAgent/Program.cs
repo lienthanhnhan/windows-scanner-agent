@@ -493,7 +493,7 @@ static bool IsAllowedOrigin(string? origin, ScannerAgentOptions options)
 public sealed class ScannerAgentOptions
 {
     public int Port { get; set; } = 9876;
-    public string ScanFolder { get; set; } = @"C:\HuyHoangScans";
+    public string ScanFolder { get; set; } = @"C:\HuyHoangScannerAgent\HuyHoangScans";
     public string UploadFieldName { get; set; } = "scan_file";
     public bool AlwaysSelectScanner { get; set; } = false;
     public bool ShowScannerUi { get; set; } = true;
