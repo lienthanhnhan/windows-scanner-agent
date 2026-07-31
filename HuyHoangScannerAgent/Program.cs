@@ -86,10 +86,12 @@ app.MapPost("/scan", async (
     }
     catch (Exception exception)
     {
-        return Results.Problem(
-            title: "Scanner failed",
-            detail: exception.Message,
-            statusCode: 500);
+        return Results.Json(new
+        {
+            ok = false,
+            message = "Scanner failed.",
+            detail = ExceptionDetails(exception)
+        }, statusCode: 500);
     }
 
     var uploadResult = await UploadScan(scannedFile, uploadUri, request.FieldName ?? settings.Value.UploadFieldName, httpClientFactory);
@@ -223,6 +225,20 @@ static bool IsScannerBusy(Exception exception)
 
     return exception.Message.Contains("busy", StringComparison.OrdinalIgnoreCase)
         || (exception.InnerException != null && IsScannerBusy(exception.InnerException));
+}
+
+static string ExceptionDetails(Exception exception)
+{
+    var messages = new List<string>();
+    var current = exception;
+
+    while (current != null)
+    {
+        messages.Add(current.Message);
+        current = current.InnerException;
+    }
+
+    return string.Join(" | ", messages.Where(message => !string.IsNullOrWhiteSpace(message)));
 }
 
 static FileInfo ScanWithWiaOnStaThread(ScannerAgentOptions options)
