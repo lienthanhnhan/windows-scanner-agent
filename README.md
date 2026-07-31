@@ -87,7 +87,32 @@ Copy the published EXE and appsettings file into that folder.
 
 ## Start Automatically With Windows
 
-Use Windows Task Scheduler to keep the local agent running after the computer starts.
+Use Windows Task Scheduler to keep the local agent running automatically.
+
+Recommended setup for most staff computers:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\scripts\install-task-at-logon.ps1
+```
+
+This starts the agent when the Windows user logs in. It is the safest option for scanner drivers because Windows scanner dialogs and WIA device access usually work best inside the logged-in user session.
+
+If the `fi-65F` direct scan works without showing scanner UI, you can install a true startup task instead:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\scripts\install-task-at-startup.ps1
+```
+
+To remove the scheduled task:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\scripts\uninstall-task.ps1
+```
+
+Manual setup:
 
 1. Open **Task Scheduler**.
 2. Click **Create Task**, not Create Basic Task.
