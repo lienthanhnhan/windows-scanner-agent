@@ -6,7 +6,12 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.Configure<ScannerAgentOptions>(builder.Configuration.GetSection("ScannerAgent"));
 builder.Services.AddCors();
-builder.Services.AddHttpClient();
+builder.Services
+    .AddHttpClient("LaravelUpload")
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+    {
+        AllowAutoRedirect = false
+    });
 
 var options = builder.Configuration.GetSection("ScannerAgent").Get<ScannerAgentOptions>() ?? new ScannerAgentOptions();
 builder.WebHost.UseUrls($"http://127.0.0.1:{options.Port}");
@@ -265,23 +270,42 @@ static async Task<UploadResult> UploadScan(
     fileContent.Headers.ContentType = new MediaTypeHeaderValue(GetContentType(scanFile.Extension));
     form.Add(fileContent, fieldName, scanFile.Name);
 
-    var client = httpClientFactory.CreateClient();
+    var client = httpClientFactory.CreateClient("LaravelUpload");
 
     var response = await client.PostAsync(uploadUri, form);
     var responseText = await response.Content.ReadAsStringAsync();
     var contentType = response.Content.Headers.ContentType?.MediaType ?? "";
+    var redirectLocation = response.Headers.Location?.ToString();
     string? uploadedPath = null;
     string? uploadedUrl = null;
     string? uploadedName = null;
+
+    if ((int) response.StatusCode >= 300 && (int) response.StatusCode <= 399)
+    {
+        return new UploadResult(
+            false,
+            response.StatusCode,
+            $"Laravel redirected the upload request. Upload URL: {uploadUri}. Redirect location: {redirectLocation ?? "not provided"}. This usually means the route is still behind login/admin middleware or the new public scanner route is not deployed.",
+            null,
+            null,
+            null);
+    }
 
     if (contentType.Contains("text/html", StringComparison.OrdinalIgnoreCase)
         || responseText.TrimStart().StartsWith("<!DOCTYPE", StringComparison.OrdinalIgnoreCase)
         || responseText.TrimStart().StartsWith("<html", StringComparison.OrdinalIgnoreCase))
     {
+        var snippet = responseText.Trim();
+
+        if (snippet.Length > 500)
+        {
+            snippet = snippet[..500];
+        }
+
         return new UploadResult(
             false,
             response.StatusCode,
-            "Laravel returned an HTML page instead of JSON. The upload URL may be behind login/admin middleware or the signed URL may be invalid.",
+            $"Laravel returned HTML instead of JSON. Upload URL: {uploadUri}. Status: {(int) response.StatusCode}. Content-Type: {contentType}. HTML starts with: {snippet}",
             null,
             null,
             null);
