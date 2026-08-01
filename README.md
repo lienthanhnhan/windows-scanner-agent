@@ -63,6 +63,29 @@ Fallback/download newest scanned file:
 GET http://127.0.0.1:9876/download-latest
 ```
 
+## Auto-Crop Scans
+
+The agent automatically trims blank scanner-bed space around JPG scans before upload.
+
+You can adjust it in `HuyHoangScannerAgent\appsettings.json`:
+
+```json
+{
+  "ScannerAgent": {
+    "AutoCropEnabled": true,
+    "AutoCropMarginPixels": 30,
+    "AutoCropWhiteThreshold": 245,
+    "AutoCropMinDifference": 18
+  }
+}
+```
+
+If the crop is too tight, increase `AutoCropMarginPixels`.
+
+If the crop does not remove enough blank area, lower `AutoCropWhiteThreshold` slightly, for example `235`.
+
+If the scanner bed has colored shadows/noise and crops too aggressively, increase `AutoCropMinDifference`, for example `25`.
+
 ## Build EXE
 
 On Windows:

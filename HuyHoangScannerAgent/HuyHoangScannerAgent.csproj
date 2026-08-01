@@ -5,5 +5,6 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>HuyHoangScannerAgent</AssemblyName>
     <RootNamespace>HuyHoangScannerAgent</RootNamespace>
+    <UseSystemDrawing>true</UseSystemDrawing>
   </PropertyGroup>
 </Project>

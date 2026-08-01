@@ -1,5 +1,7 @@
 using System.Net.Http.Headers;
 using System.Runtime.InteropServices;
+using System.Drawing;
+using System.Drawing.Imaging;
 using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -273,6 +275,7 @@ static FileInfo ScanWithWiaOnStaThread(ScannerAgentOptions options)
             dynamic item = device.Items[1];
             dynamic preferredImageFile = item.Transfer(jpegFormatId);
             preferredImageFile.SaveFile(filePath);
+            AutoCropScan(filePath, options);
 
             return new FileInfo(filePath);
         }
@@ -295,8 +298,124 @@ static FileInfo ScanWithWiaOnStaThread(ScannerAgentOptions options)
         true);
 
     imageFile.SaveFile(filePath);
+    AutoCropScan(filePath, options);
 
     return new FileInfo(filePath);
+}
+
+static void AutoCropScan(string filePath, ScannerAgentOptions options)
+{
+    if (!options.AutoCropEnabled || !File.Exists(filePath))
+    {
+        return;
+    }
+
+    var extension = Path.GetExtension(filePath).ToLowerInvariant();
+
+    if (extension is not ".jpg" and not ".jpeg" and not ".png" and not ".bmp")
+    {
+        return;
+    }
+
+    try
+    {
+        using var source = new Bitmap(filePath);
+        var cropArea = DetectContentBounds(source, options.AutoCropWhiteThreshold, options.AutoCropMinDifference);
+
+        if (cropArea == Rectangle.Empty)
+        {
+            return;
+        }
+
+        var margin = Math.Max(0, options.AutoCropMarginPixels);
+        cropArea = ExpandRectangle(cropArea, margin, source.Width, source.Height);
+
+        // Avoid rewriting if the detected bounds are effectively the whole scan bed.
+        if (cropArea.Width >= source.Width - 2 && cropArea.Height >= source.Height - 2)
+        {
+            return;
+        }
+
+        using var cropped = source.Clone(cropArea, source.PixelFormat);
+        SaveBitmap(cropped, filePath, extension);
+    }
+    catch
+    {
+        // Cropping should never block scanning. Keep the original image if cleanup fails.
+    }
+}
+
+static Rectangle DetectContentBounds(Bitmap bitmap, int whiteThreshold, int minDifference)
+{
+    var threshold = Math.Clamp(whiteThreshold, 1, 255);
+    var difference = Math.Clamp(minDifference, 1, 255);
+    var left = bitmap.Width;
+    var top = bitmap.Height;
+    var right = -1;
+    var bottom = -1;
+    var sampleStep = Math.Max(1, Math.Min(bitmap.Width, bitmap.Height) / 1200);
+
+    for (var y = 0; y < bitmap.Height; y += sampleStep)
+    {
+        for (var x = 0; x < bitmap.Width; x += sampleStep)
+        {
+            var pixel = bitmap.GetPixel(x, y);
+
+            if (IsContentPixel(pixel, threshold, difference))
+            {
+                left = Math.Min(left, x);
+                top = Math.Min(top, y);
+                right = Math.Max(right, x);
+                bottom = Math.Max(bottom, y);
+            }
+        }
+    }
+
+    if (right < left || bottom < top)
+    {
+        return Rectangle.Empty;
+    }
+
+    return Rectangle.FromLTRB(left, top, Math.Min(bitmap.Width, right + sampleStep), Math.Min(bitmap.Height, bottom + sampleStep));
+}
+
+static bool IsContentPixel(Color pixel, int whiteThreshold, int minDifference)
+{
+    var brightest = Math.Max(pixel.R, Math.Max(pixel.G, pixel.B));
+    var darkest = Math.Min(pixel.R, Math.Min(pixel.G, pixel.B));
+
+    return pixel.R < whiteThreshold
+        || pixel.G < whiteThreshold
+        || pixel.B < whiteThreshold
+        || brightest - darkest >= minDifference;
+}
+
+static Rectangle ExpandRectangle(Rectangle rectangle, int margin, int maxWidth, int maxHeight)
+{
+    var left = Math.Max(0, rectangle.Left - margin);
+    var top = Math.Max(0, rectangle.Top - margin);
+    var right = Math.Min(maxWidth, rectangle.Right + margin);
+    var bottom = Math.Min(maxHeight, rectangle.Bottom + margin);
+
+    return Rectangle.FromLTRB(left, top, right, bottom);
+}
+
+static void SaveBitmap(Bitmap bitmap, string filePath, string extension)
+{
+    var tempPath = Path.Combine(
+        Path.GetDirectoryName(filePath) ?? "",
+        $"{Path.GetFileNameWithoutExtension(filePath)}-cropped{extension}");
+
+    var format = extension switch
+    {
+        ".png" => ImageFormat.Png,
+        ".bmp" => ImageFormat.Bmp,
+        _ => ImageFormat.Jpeg
+    };
+
+    bitmap.Save(tempPath, format);
+    File.Delete(filePath);
+    File.Move(tempPath, filePath);
 }
 
 static dynamic? FindPreferredScanner(ScannerAgentOptions options, int scannerDeviceType)
@@ -500,6 +619,10 @@ public sealed class ScannerAgentOptions
     public string PreferredScannerNameContains { get; set; } = "fi-65F";
     public int ScanRetryAttempts { get; set; } = 3;
     public int ScanRetryDelayMs { get; set; } = 1500;
+    public bool AutoCropEnabled { get; set; } = true;
+    public int AutoCropMarginPixels { get; set; } = 30;
+    public int AutoCropWhiteThreshold { get; set; } = 245;
+    public int AutoCropMinDifference { get; set; } = 18;
     public string[] AllowedOrigins { get; set; } = [];
     public string[] AllowedExtensions { get; set; } = [".pdf", ".jpg", ".jpeg", ".png", ".tif", ".tiff"];
 }
