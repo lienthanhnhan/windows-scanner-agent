@@ -28,7 +28,9 @@ New-Item -ItemType Directory -Force -Path $scanDir | Out-Null
 $currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
 $action = New-ScheduledTaskAction -Execute $exePath -WorkingDirectory $AgentDir
 $trigger = New-ScheduledTaskTrigger -AtLogOn -User $currentUser
+$trigger.Delay = "PT1M"
 $settings = New-ScheduledTaskSettingsSet `
+    -ExecutionTimeLimit ([TimeSpan]::Zero) `
     -AllowStartIfOnBatteries `
     -DontStopIfGoingOnBatteries `
     -StartWhenAvailable `
@@ -48,6 +50,15 @@ Register-ScheduledTask `
     -Force | Out-Null
 
 Start-ScheduledTask -TaskName $TaskName
+
+$protocolKey = "HKCU:\Software\Classes\huyhoang-scanner"
+$commandKey = Join-Path $protocolKey "shell\open\command"
+$AgentDir = (Get-Item -LiteralPath $AgentDir).FullName.TrimEnd('\')
+$exePath = Join-Path $AgentDir "HuyHoangScannerAgent.exe"
+New-Item -Path $commandKey -Force | Out-Null
+Set-Item -LiteralPath $protocolKey -Value "URL:Huy Hoang Scanner Agent"
+New-ItemProperty -LiteralPath $protocolKey -Name "URL Protocol" -Value "" -PropertyType String -Force | Out-Null
+Set-Item -LiteralPath $commandKey -Value ('"{0}" --contentRoot "{1}"' -f $exePath, $AgentDir)
 
 Write-Host "Installed and started '$TaskName' for $currentUser."
 Write-Host "Test it in the browser: http://127.0.0.1:9876/health"

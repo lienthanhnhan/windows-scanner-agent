@@ -119,7 +119,22 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 .\scripts\install-task-at-logon.ps1
 ```
 
-This starts the agent when the Windows user logs in. It is the safest option for scanner drivers because Windows scanner dialogs and WIA device access usually work best inside the logged-in user session.
+This starts the agent one minute after the Windows user logs in, giving the desktop session time to initialize. Run the installer from the same Windows account that will use the scanner, with PowerShell elevated. If you use a separate administrator account to install the task, it will be registered for that account's sign-in.
+
+After restarting, sign in and wait one minute before checking http://127.0.0.1:9876/health. If the agent is unavailable, check the task's **History** and **Last Run Result** before starting it manually, so you can see what happened at sign-in.
+
+The logon installer also enables **Start scanner agent** on the customer page for that Windows account. Rerun the updated installer once on each workstation to enable the button. If the agent is down, click the button, approve the browser prompt, and then click **Scan document**.
+
+If `dotnet run` works but the scheduled task does not, stop the terminal run with Ctrl+C so port 9876 is available. In PowerShell as administrator, stop the old task if it is running, then publish from the repository root and replace the installed EXE. Preserve your installed `appsettings.json` if you customized it.
+
+```powershell
+Stop-ScheduledTask -TaskName "Huy Hoang Scanner Agent"
+dotnet publish HuyHoangScannerAgent -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
+Copy-Item .\HuyHoangScannerAgent\bin\Release\net8.0-windows\win-x64\publish\HuyHoangScannerAgent.exe C:\HuyHoangScannerAgent\ -Force
+.\scripts\install-task-at-logon.ps1
+```
+
+Open http://127.0.0.1:9876/health and try a scan. If the agent exits, check the task's **Last Run Result** with `Get-ScheduledTaskInfo -TaskName "Huy Hoang Scanner Agent"`. You can also launch the installed EXE from `C:\HuyHoangScannerAgent` to see its startup error.
 
 If the `fi-65F` direct scan works without showing scanner UI, you can install a true startup task instead:
 
@@ -165,6 +180,7 @@ C:\HuyHoangScannerAgent
 6. On the **Conditions** tab:
    - Uncheck `Start the task only if the computer is on AC power` if needed.
 7. On the **Settings** tab:
+   - Uncheck `Stop the task if it runs longer than`
    - Check `Run task as soon as possible after a scheduled start is missed`
    - If the task fails, restart every `1 minute`
    - Attempt restart `3 times`

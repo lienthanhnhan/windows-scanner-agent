@@ -28,6 +28,7 @@ New-Item -ItemType Directory -Force -Path $scanDir | Out-Null
 $action = New-ScheduledTaskAction -Execute $exePath -WorkingDirectory $AgentDir
 $trigger = New-ScheduledTaskTrigger -AtStartup
 $settings = New-ScheduledTaskSettingsSet `
+    -ExecutionTimeLimit ([TimeSpan]::Zero) `
     -AllowStartIfOnBatteries `
     -DontStopIfGoingOnBatteries `
     -StartWhenAvailable `
