@@ -58,7 +58,11 @@ $exePath = Join-Path $AgentDir "HuyHoangScannerAgent.exe"
 New-Item -Path $commandKey -Force | Out-Null
 Set-Item -LiteralPath $protocolKey -Value "URL:Huy Hoang Scanner Agent"
 New-ItemProperty -LiteralPath $protocolKey -Name "URL Protocol" -Value "" -PropertyType String -Force | Out-Null
-Set-Item -LiteralPath $commandKey -Value ('"{0}" --contentRoot "{1}"' -f $exePath, $AgentDir)
+# Register a fixed command without passing browser-supplied URL arguments.
+$launchScript = "Start-Process -FilePath '$($exePath.Replace("'", "''"))' -WorkingDirectory '$($AgentDir.Replace("'", "''"))' -WindowStyle Hidden"
+$encodedLaunch = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($launchScript))
+$powerShellExe = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
+Set-Item -LiteralPath $commandKey -Value ('"{0}" -NoProfile -NonInteractive -WindowStyle Hidden -EncodedCommand {1}' -f $powerShellExe, $encodedLaunch)
 
 Write-Host "Installed and started '$TaskName' for $currentUser."
 Write-Host "Test it in the browser: http://127.0.0.1:9876/health"
